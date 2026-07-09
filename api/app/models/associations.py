@@ -1,7 +1,7 @@
 from sqlalchemy import Table, Column, Integer, ForeignKey
 from app.db.database import Base
 
-# En lugar de ser una clase, la definimos como Tabla ya que al ser intermedia, no necesitamos consultarla (más liviano)
+# En lugar de ser una clase, la definimos como Tabla ya que al ser intermedia y no contener lógica, no necesitamos consultarla (más liviano)
 user_roles = Table(
     "user_roles",
     Base.metadata,
