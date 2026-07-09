@@ -107,21 +107,21 @@ api-guardian/
 ├── .env.example
 ├── .gitignore
 ├── README.md
-├── db/
+├── database/
 │   └── init.sql
-└── target_api/
+└── api/
     ├── requirements.txt
     └── app/
         ├── main.py
         ├── db/
         │   └── database.py
         └── models/
-            ├── user.py
-            ├── role.py
+            ├── alert_log.py
+            ├── alert.py
             ├── associations.py
             ├── request_log.py
-            ├── alert.py
-            └── alert_log.py
+            ├── role.py
+            └── user.py
 ```
 
 ## Contexto del proyecto
