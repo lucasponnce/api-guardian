@@ -29,7 +29,7 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 
 El proyecto está pensado en componentes separados:
 
-1. **`target_api/`** — una API REST "objetivo" (login, usuarios, recursos) que sirve como banco de pruebas.
+1. **`api/`** — una API REST "objetivo" (login, usuarios, recursos) que sirve como banco de pruebas.
 2. **`security_gateway/`** — middleware que intercepta cada request, lo loguea y lo evalúa contra el modelo de detección. *(pendiente)*
 3. **`traffic_simulator/`** — scripts que generan tráfico normal y tráfico de ataque simulado para entrenar y probar el sistema. *(pendiente)*
 4. **`dashboard/`** — panel donde se visualizan las alertas generadas. *(pendiente)*
