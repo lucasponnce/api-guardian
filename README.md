@@ -46,14 +46,14 @@ El diseño contempla 6 tablas:
 
 Tipos de alerta contemplados: `bruteforce`, `idor`, `scraping`, `rate_limit_abuse`, `sql_injection_attempt`, `endpoint_fuzzing`.
 
-El schema completo (DDL) vive en [`db/init.sql`](./db/init.sql) y se aplica automáticamente al levantar el contenedor de PostgreSQL.
+El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se aplica automáticamente al levantar el contenedor de PostgreSQL.
 
 ## Estado actual del proyecto
 
 - [x] Diseño del DER y modelado de relaciones (incluye tabla intermedia many-to-many y relación 1 a muchos vía tabla puente)
 - [x] `init.sql` con constraints (`NOT NULL`, `CHECK`, `UNIQUE`, `DEFAULT`), índices y foreign keys
 - [x] PostgreSQL corriendo en Docker, con credenciales gestionadas por `.env`
-- [x] Estructura inicial de `target_api/` con FastAPI
+- [x] Estructura inicial de `api/` con FastAPI
 - [x] Modelos SQLAlchemy de las 6 tablas (`User`, `Role`, `user_roles`, `RequestLog`, `Alert`, `AlertLog`)
 - [ ] Conexión verificada entre FastAPI y PostgreSQL (engine/session probados)
 - [ ] Endpoints de autenticación (registro, login con JWT)
