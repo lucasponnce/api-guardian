@@ -2,9 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.schemas.user import UserCreate, UserOut
-from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
+from app.core.security import hash_password, verify_password, create_access_token, decode_access_token, get_current_user
 from app.models import User
-from app.schemas.login import LoginRequest
+from fastapi.security import OAuth2PasswordRequestForm
 
 app = FastAPI(title="API Guardian")
 
@@ -30,12 +30,16 @@ async def register(data: UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 @app.post("/login")
-async def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username).first()
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == form_data.username).first()
 
-    if not user or not verify_password(data.password, user.password_hash):
+    if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
     
     access_token = create_access_token({"sub": user.username})
 
-    return {"acces_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/me", response_model=UserOut)
+async def read_current_user(current_user: User = Depends(get_current_user)):
+    return current_user

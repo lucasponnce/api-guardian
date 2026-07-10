@@ -1,3 +1,8 @@
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+from app.db.database import get_db
+from app.models import User
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from jose import jwt
@@ -32,3 +37,18 @@ def decode_access_token(token: str):
         return sub
     except jwt.JWTError:
         return None
+    
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+    
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    username = decode_access_token(token)
+    if username is None:
+        raise HTTPException(status_code=401, detail="El token es inválido o ha expirado")
+
+    user = db.query(User).filter(User.username == username).first()
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="El usuario no existe")
+    
+    return user
