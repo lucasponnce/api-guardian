@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import INET
 from app.db.database import Base
 
@@ -14,4 +14,4 @@ class RequestLog(Base):
     request_payload = Column(Text)
     status_code = Column(Integer, nullable=False)
     response_time_ms = Column(Integer)
-    created_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
