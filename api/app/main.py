@@ -56,7 +56,7 @@ async def log_request(request: Request, call_next):
     db = SessionLocal()
     try:
         log = RequestLog(
-            ip_address = request.client.host,
+            ip_address = request.headers.get("X-Forwarded-For", request.client.host).split(",")[0].strip(),
             method = request.method,
             endpoint = request.url.path,
             query_params = str(request.url.query) if request.url.query else None,
@@ -71,3 +71,10 @@ async def log_request(request: Request, call_next):
         db.close()
 
     return response
+
+@app.get("/users/{user_id}", response_model=UserOut)
+async def get_user_by_id(user_id, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return user
