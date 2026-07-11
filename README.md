@@ -22,16 +22,18 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 * Base de datos: PostgreSQL 17
 * Backend: Python 3 + FastAPI
 * ORM: SQLAlchemy
-* Machine Learning: scikit-learn (Isolation Forest) *(próximamente)*
+* Autenticación: JWT (python-jose) + hasheo de contraseñas con bcrypt (passlib)
+* Análisis de datos: pandas
+* Machine Learning: scikit-learn (Isolation Forest) *(en desarrollo)*
 * Orquestación: Docker + Docker Compose
 
 ## Arquitectura (visión general)
 
 El proyecto está pensado en componentes separados:
 
-1. **`api/`** — una API REST "objetivo" (login, usuarios, recursos) que sirve como banco de pruebas.
-2. **`security_gateway/`** — middleware que intercepta cada request, lo loguea y lo evalúa contra el modelo de detección. *(pendiente)*
-3. **`traffic_simulator/`** — scripts que generan tráfico normal y tráfico de ataque simulado para entrenar y probar el sistema. *(pendiente)*
+1. **`api/`** — API REST "objetivo" (registro, login con JWT, endpoint protegido `/me`, consulta de usuarios por ID) que sirve como banco de pruebas. Incluye el middleware que loguea cada request en `request_logs`.
+2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs` y motor de detección de anomalías (Isolation Forest). No intercepta tráfico en vivo; lee los logs generados por `api/`.
+3. **`traffic_simulator/`** — scripts que generan tráfico normal (`normal_traffic.py`) y tráfico de ataque simulado (`attack_simulator.py`: fuerza bruta, scraping/IDOR, endpoint fuzzing) contra la API objetivo.
 4. **`dashboard/`** — panel donde se visualizan las alertas generadas. *(pendiente)*
 
 ## Modelo de datos
@@ -44,7 +46,7 @@ El diseño contempla 6 tablas:
 - `alerts` — alertas generadas a partir de patrones sospechosos detectados (tipo, score de anomalía, ventana temporal del patrón, estado de revisión).
 - `alert_logs` — tabla intermedia que vincula cada alerta con los `request_logs` puntuales que la originaron.
 
-Tipos de alerta contemplados: `bruteforce`, `idor`, `scraping`, `rate_limit_abuse`, `sql_injection_attempt`, `endpoint_fuzzing`.
+Tipos de alerta contemplados: `bruteforce`, `idor`, `scraping`, `rate_limit`, `sql_injection`, `endpoint_fuzzing`.
 
 El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se aplica automáticamente al levantar el contenedor de PostgreSQL.
 
@@ -53,21 +55,24 @@ El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se
 - [x] Diseño del DER y modelado de relaciones (incluye tabla intermedia many-to-many y relación 1 a muchos vía tabla puente)
 - [x] `init.sql` con constraints (`NOT NULL`, `CHECK`, `UNIQUE`, `DEFAULT`), índices y foreign keys
 - [x] PostgreSQL corriendo en Docker, con credenciales gestionadas por `.env`
-- [x] Estructura inicial de `api/` con FastAPI
 - [x] Modelos SQLAlchemy de las 6 tablas (`User`, `Role`, `user_roles`, `RequestLog`, `Alert`, `AlertLog`)
-- [ ] Conexión verificada entre FastAPI y PostgreSQL (engine/session probados)
-- [ ] Endpoints de autenticación (registro, login con JWT)
-- [ ] Endpoints de recursos de la API objetivo
-- [ ] Middleware de logging de requests (`security_gateway`)
-- [ ] Simulador de tráfico normal y de ataques
-- [ ] Extracción de features y entrenamiento del modelo de detección (Isolation Forest)
+- [x] Conexión verificada entre FastAPI y PostgreSQL
+- [x] Endpoints de autenticación (registro, login con JWT, endpoint protegido `/me`)
+- [x] Endpoint de consulta de usuario por ID (`/users/{id}`, banco de pruebas para IDOR/scraping)
+- [x] Middleware de logging de requests en `api/`
+- [x] Simulador de tráfico normal (`traffic_simulator/normal_traffic.py`)
+- [x] Simulador de ataques: fuerza bruta, scraping, endpoint fuzzing (`traffic_simulator/attack_simulator.py`)
+- [x] Conexión de `security_gateway` a PostgreSQL
+- [x] Extracción de features por IP (volumen de requests, tasa de fallos, diversidad de endpoints) con pandas
+- [ ] Entrenamiento del modelo de detección (Isolation Forest)
+- [ ] Generación de alertas a partir del modelo
 - [ ] Dashboard de alertas
 
 ## Cómo levantar el entorno (hasta ahora)
 
 ### 1. Variables de entorno
 
-Copiar `.env.example` a `.env` y completar los valores:
+Copiar `.env.example` a `.env` en la raíz del proyecto y en `security_gateway/`, y completar los valores:
 
 ```bash
 cp .env.example .env
@@ -86,10 +91,10 @@ Verificar las tablas creadas:
 docker exec -it apiguardian_db psql -U postgres -d api_guardian -c "\dt"
 ```
 
-### 3. Levantar la API objetivo (en desarrollo)
+### 3. Levantar la API objetivo
 
 ```bash
-cd target_api
+cd api
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -98,6 +103,30 @@ uvicorn app.main:app --reload --port 8000
 
 - API: `http://localhost:8000/`
 - Documentación interactiva (Swagger): `http://localhost:8000/docs`
+
+### 4. Generar tráfico de prueba
+
+```bash
+cd traffic_simulator
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+python3 normal_traffic.py --num-users 10 --duration 60 --rpm 30
+```
+
+Los ataques (`attack_simulator.py`) se prueban actualmente desde la consola interactiva de Python, importando las funciones `brute_force_attack`, `scraping_attack` y `endpoint_fuzzing_attack`.
+
+### 5. Extraer features de los logs
+
+```bash
+cd security_gateway
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+python3 -m app.detection.extraction
+```
 
 ## Estructura del repositorio
 
@@ -109,19 +138,33 @@ api-guardian/
 ├── README.md
 ├── database/
 │   └── init.sql
-└── api/
+├── api/
+│   ├── requirements.txt
+│   └── app/
+│       ├── main.py
+│       ├── core/
+│       │   └── security.py
+│       ├── schemas/
+│       │   └── user.py
+│       ├── db/
+│       │   └── database.py
+│       └── models/
+│           ├── alert_log.py
+│           ├── alert.py
+│           ├── associations.py
+│           ├── request_log.py
+│           ├── role.py
+│           └── user.py
+├── traffic_simulator/
+│   ├── normal_traffic.py
+│   └── attack_simulator.py
+└── security_gateway/
     ├── requirements.txt
     └── app/
-        ├── main.py
         ├── db/
         │   └── database.py
-        └── models/
-            ├── alert_log.py
-            ├── alert.py
-            ├── associations.py
-            ├── request_log.py
-            ├── role.py
-            └── user.py
+        └── detection/
+            └── extraction.py
 ```
 
 ## Contexto del proyecto
