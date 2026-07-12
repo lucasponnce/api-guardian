@@ -58,7 +58,7 @@ El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se
 - [x] Modelos SQLAlchemy de las 6 tablas (`User`, `Role`, `user_roles`, `RequestLog`, `Alert`, `AlertLog`)
 - [x] Conexión verificada entre FastAPI y PostgreSQL
 - [x] Endpoints de autenticación (registro, login con JWT, endpoint protegido `/me`)
-- [x] Endpoint de consulta de usuario por ID (`/users/{id}`, banco de pruebas para IDOR/scraping)
+- [x] Endpoint de consulta de usuario por ID (`/users/{id}`, banco de pruebas para scraping)
 - [x] Middleware de logging de requests en `api/`
 - [x] Simulador de tráfico normal (`traffic_simulator/normal_traffic.py`)
 - [x] Simulador de ataques: fuerza bruta, scraping, endpoint fuzzing (`traffic_simulator/attack_simulator.py`)
