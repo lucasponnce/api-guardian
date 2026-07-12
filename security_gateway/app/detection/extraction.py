@@ -16,8 +16,20 @@ def extract_features():
     # Hacemos un DataFrame con las 3 características calculadas
     features = pd.DataFrame({
         "total_requests": requests_por_ip,
-        "tasa_fallos": tasa_fallos_por_ip,
-        "endpoints_distintos": endpoints_distintos_por_ip
+        "failure_rate": tasa_fallos_por_ip,
+        "different_endpoints": endpoints_distintos_por_ip
     })
 
-    return features
+    start_ip = df.groupby("ip_address")["created_at"].min() # Fecha y hora exacta en la que empieza el patrón
+    end_ip = df.groupby("ip_address")["created_at"].max() # Fecha y hora exacta en la que finaliza el patrón
+
+    range_by_ip = pd.DataFrame({
+        "pattern_started_at": start_ip,
+        "pattern_ended_at": end_ip
+    })
+
+    
+
+    return features, range_by_ip
+
+# extract_features()

@@ -2,9 +2,6 @@ import requests
 import time
 from normal_traffic import API_URL, IP_HEADER
 import random
-import argparse
-
-# IPS_SIMULADAS = [f"192.168.1.{i}" for i in range(1, 21)]
 
 def brute_force_attack(username, attempts=50):
     url = f"{API_URL}/login"
