@@ -24,7 +24,7 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 * ORM: SQLAlchemy
 * Autenticación: JWT (python-jose) + hasheo de contraseñas con bcrypt (passlib)
 * Análisis de datos: pandas
-* Machine Learning: scikit-learn (Isolation Forest) *(en desarrollo)*
+* Machine Learning: scikit-learn (Isolation Forest), persistencia del modelo con joblib
 * Orquestación: Docker + Docker Compose
 
 ## Arquitectura (visión general)
@@ -32,7 +32,7 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 El proyecto está pensado en componentes separados:
 
 1. **`api/`** — API REST "objetivo" (registro, login con JWT, endpoint protegido `/me`, consulta de usuarios por ID) que sirve como banco de pruebas. Incluye el middleware que loguea cada request en `request_logs`.
-2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs` y motor de detección de anomalías (Isolation Forest). No intercepta tráfico en vivo; lee los logs generados por `api/`.
+2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs`, entrenamiento del modelo de detección de anomalías (Isolation Forest) y generación de alertas. No intercepta tráfico en vivo; lee los logs generados por `api/`.
 3. **`traffic_simulator/`** — scripts que generan tráfico normal (`normal_traffic.py`) y tráfico de ataque simulado (`attack_simulator.py`: fuerza bruta, scraping/IDOR, endpoint fuzzing) contra la API objetivo.
 4. **`dashboard/`** — panel donde se visualizan las alertas generadas. *(pendiente)*
 
@@ -62,10 +62,11 @@ El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se
 - [x] Middleware de logging de requests en `api/`
 - [x] Simulador de tráfico normal (`traffic_simulator/normal_traffic.py`)
 - [x] Simulador de ataques: fuerza bruta, scraping, endpoint fuzzing (`traffic_simulator/attack_simulator.py`)
-- [x] Conexión de `security_gateway` a PostgreSQL
 - [x] Extracción de features por IP (volumen de requests, tasa de fallos, diversidad de endpoints) con pandas
-- [ ] Entrenamiento del modelo de detección (Isolation Forest)
-- [ ] Generación de alertas a partir del modelo
+- [x] Entrenamiento del modelo de detección (Isolation Forest) y persistencia con joblib
+- [x] Generación de alertas a partir del modelo, con clasificación por tipo de ataque
+- [x] Exclusión de IPs de confianza y prevención de alertas duplicadas
+- [ ] Vinculación de alertas con los `request_logs` puntuales que las originaron (`alert_logs`)
 - [ ] Dashboard de alertas
 
 ## Cómo levantar el entorno (hasta ahora)
@@ -91,7 +92,7 @@ Verificar las tablas creadas:
 docker exec -it apiguardian_db psql -U postgres -d api_guardian -c "\dt"
 ```
 
-### 3. Levantar la API objetivo
+### 3. Levantar la API
 
 ```bash
 cd api
@@ -117,7 +118,7 @@ python3 normal_traffic.py --num-users 10 --duration 60 --rpm 30
 
 Los ataques (`attack_simulator.py`) se prueban actualmente desde la consola interactiva de Python, importando las funciones `brute_force_attack`, `scraping_attack` y `endpoint_fuzzing_attack`.
 
-### 5. Extraer features de los logs
+### 5. Entrenar el modelo y detectar anomalías
 
 ```bash
 cd security_gateway
@@ -125,7 +126,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-python3 -m app.detection.extraction
+python3 -m app.detection.train_model   # entrena y guarda el modelo en model.pkl
+python3 -m app.detection.detect        # aplica el modelo y genera alertas nuevas
 ```
 
 ## Estructura del repositorio
@@ -164,13 +166,9 @@ api-guardian/
         ├── db/
         │   └── database.py
         └── detection/
-            └── extraction.py
+            ├── extraction.py
+            ├── classification.py
+            ├── train_model.py
+            ├── detect.py
+            └── model.pkl
 ```
-
-## Contexto del proyecto
-
-Este proyecto nace como continuación de un portfolio enfocado en bases de datos y backend, sumando un enfoque nuevo: seguridad de aplicaciones web y una introducción práctica a Machine Learning aplicado a detección de anomalías, usando tecnologías modernas y con alta demanda (FastAPI, APIs security, ML no supervisado).
-
----
-
-*Proyecto en desarrollo activo — este README se irá actualizando a medida que avancen las fases.*

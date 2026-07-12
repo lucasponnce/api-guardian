@@ -35,8 +35,4 @@ def extract_features():
         "pattern_ended_at": end_ip
     })
 
-    
-
     return features, range_by_ip
-
-# extract_features()
