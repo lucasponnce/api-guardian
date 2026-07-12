@@ -1,8 +1,14 @@
 import pandas as pd
 from app.db.database import engine
 
+# Agrego la ip local para posteriormente excluirla del análisis
+TRUSTED_IPS = ["127.0.0.1"]
+
 def extract_features():
     df = pd.read_sql("SELECT * FROM request_logs", engine)
+    # Excluímos la ip local
+    df = df[~df["ip_address"].isin(TRUSTED_IPS)]
+
     # Agregamos una columna booleana que indique si el request falló
     df["es_fallo"] = df["status_code"] >= 400
 
@@ -20,9 +26,10 @@ def extract_features():
         "different_endpoints": endpoints_distintos_por_ip
     })
 
-    start_ip = df.groupby("ip_address")["created_at"].min() # Fecha y hora exacta en la que empieza el patrón
-    end_ip = df.groupby("ip_address")["created_at"].max() # Fecha y hora exacta en la que finaliza el patrón
+    start_ip = df.groupby("ip_address")["created_at"].min() # Fecha y hora exacta del primer request por ip
+    end_ip = df.groupby("ip_address")["created_at"].max() # Fecha y hora exacta del último request por ip
 
+    # Creamos la "ventana" de tiempo
     range_by_ip = pd.DataFrame({
         "pattern_started_at": start_ip,
         "pattern_ended_at": end_ip

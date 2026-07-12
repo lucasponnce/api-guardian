@@ -1,3 +1,4 @@
+# Función para clasificar el tipo de alerta
 def classify_alert_type(row):
     if row["different_endpoints"] == 1:
         return "bruteforce"
