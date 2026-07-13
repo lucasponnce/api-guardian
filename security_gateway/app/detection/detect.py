@@ -2,7 +2,9 @@ import joblib
 import pandas as pd
 from app.detection.extraction import extract_features
 from app.detection.classification import classify_alert_type
-from app.db.database import engine
+from api.app.models import AlertLog
+from app.db.database import engine, SessionLocal
+from sqlalchemy import text
 
 # Cargamos el modelo ya entrenado, en vez de entrenar de nuevo
 model = joblib.load("app/detection/model.pkl")
@@ -49,3 +51,40 @@ new_alerts = new_alerts.drop(columns=["existence"])
 
 # Ahora insertamos los datos en la tabla alerts de la DB utilizando to_sql de pandas
 new_alerts.to_sql("alerts", engine, if_exists="append", index=False)
+
+all_alerts_in_db = pd.read_sql("SELECT id, ip_address, alert_type, pattern_started_at, pattern_ended_at FROM alerts", engine)
+
+alerts_with_id = new_alerts.merge(
+    all_alerts_in_db,
+    on=["ip_address", "alert_type", "pattern_started_at", "pattern_ended_at"],
+    how="inner" # Las filas que tienen coincidencia en ambas tablas
+)
+
+db = SessionLocal()
+try:
+    for i, alert_row in alerts_with_id.iterrows():
+        query = text("""
+            SELECT id FROM request_logs
+            WHERE ip_address = :ip
+            AND created_at BETWEEN :start AND :end
+        """)
+        with engine.connect() as connection:
+            result = connection.execute(
+                query, {
+                    "ip": alert_row["ip_address"],
+                    "start": alert_row["pattern_started_at"],
+                    "end": alert_row["pattern_ended_at"]
+                }
+            )
+            matching_logs = result.fetchall()
+
+        for log in matching_logs:
+            new_alert_log = AlertLog(
+                request_logs_id=log.id,
+                alerts_id=alert_row["id"]
+            )
+            db.add(new_alert_log)
+
+    db.commit()
+finally:
+    db.close()
