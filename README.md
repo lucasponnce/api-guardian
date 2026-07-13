@@ -32,7 +32,7 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 El proyecto está pensado en componentes separados:
 
 1. **`api/`** — API REST "objetivo" (registro, login con JWT, endpoint protegido `/me`, consulta de usuarios por ID) que sirve como banco de pruebas. Incluye el middleware que loguea cada request en `request_logs`.
-2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs`, entrenamiento del modelo de detección de anomalías (Isolation Forest) y generación de alertas. No intercepta tráfico en vivo; lee los logs generados por `api/`.
+2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs`, entrenamiento del modelo de detección de anomalías (Isolation Forest) y generación de alertas, incluyendo su vinculación con los `request_logs` que las originaron. No intercepta tráfico en vivo; lee los logs generados por `api/`.
 3. **`traffic_simulator/`** — scripts que generan tráfico normal (`normal_traffic.py`) y tráfico de ataque simulado (`attack_simulator.py`: fuerza bruta, scraping/IDOR, endpoint fuzzing) contra la API objetivo.
 4. **`dashboard/`** — panel donde se visualizan las alertas generadas. *(pendiente)*
 
@@ -50,26 +50,7 @@ Tipos de alerta contemplados: `bruteforce`, `idor`, `scraping`, `rate_limit`, `s
 
 El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se aplica automáticamente al levantar el contenedor de PostgreSQL.
 
-## Estado actual del proyecto
-
-- [x] Diseño del DER y modelado de relaciones (incluye tabla intermedia many-to-many y relación 1 a muchos vía tabla puente)
-- [x] `init.sql` con constraints (`NOT NULL`, `CHECK`, `UNIQUE`, `DEFAULT`), índices y foreign keys
-- [x] PostgreSQL corriendo en Docker, con credenciales gestionadas por `.env`
-- [x] Modelos SQLAlchemy de las 6 tablas (`User`, `Role`, `user_roles`, `RequestLog`, `Alert`, `AlertLog`)
-- [x] Conexión verificada entre FastAPI y PostgreSQL
-- [x] Endpoints de autenticación (registro, login con JWT, endpoint protegido `/me`)
-- [x] Endpoint de consulta de usuario por ID (`/users/{id}`, banco de pruebas para scraping)
-- [x] Middleware de logging de requests en `api/`
-- [x] Simulador de tráfico normal (`traffic_simulator/normal_traffic.py`)
-- [x] Simulador de ataques: fuerza bruta, scraping, endpoint fuzzing (`traffic_simulator/attack_simulator.py`)
-- [x] Extracción de features por IP (volumen de requests, tasa de fallos, diversidad de endpoints) con pandas
-- [x] Entrenamiento del modelo de detección (Isolation Forest) y persistencia con joblib
-- [x] Generación de alertas a partir del modelo, con clasificación por tipo de ataque
-- [x] Exclusión de IPs de confianza y prevención de alertas duplicadas
-- [ ] Vinculación de alertas con los `request_logs` puntuales que las originaron (`alert_logs`)
-- [ ] Dashboard de alertas
-
-## Cómo levantar el entorno (hasta ahora)
+## Cómo levantar el entorno
 
 ### 1. Variables de entorno
 
@@ -113,7 +94,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-python3 normal_traffic.py --num-users 10 --duration 60 --rpm 30
+python3 normal_traffic.py --num-users 50 --duration 300 --rpm 60
 ```
 
 Los ataques (`attack_simulator.py`) se prueban actualmente desde la consola interactiva de Python, importando las funciones `brute_force_attack`, `scraping_attack` y `endpoint_fuzzing_attack`.
@@ -127,7 +108,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 python3 -m app.detection.train_model   # entrena y guarda el modelo en model.pkl
-python3 -m app.detection.detect        # aplica el modelo y genera alertas nuevas
+python3 -m app.detection.detect        # aplica el modelo, genera alertas y las vincula a sus request_logs de origen
 ```
 
 ## Estructura del repositorio
