@@ -2,8 +2,7 @@ import joblib
 import pandas as pd
 from app.detection.extraction import extract_features
 from app.detection.classification import classify_alert_type
-from api.app.models import AlertLog
-from app.db.database import engine, SessionLocal
+from app.db.database import engine
 from sqlalchemy import text
 
 # Cargamos el modelo ya entrenado, en vez de entrenar de nuevo
@@ -60,17 +59,16 @@ alerts_with_id = new_alerts.merge(
     how="inner" # Las filas que tienen coincidencia en ambas tablas
 )
 
-db = SessionLocal()
 try:
     for i, alert_row in alerts_with_id.iterrows():
-        query = text("""
+        select_query = text("""
             SELECT id FROM request_logs
             WHERE ip_address = :ip
             AND created_at BETWEEN :start AND :end
         """)
         with engine.connect() as connection:
             result = connection.execute(
-                query, {
+                select_query, {
                     "ip": alert_row["ip_address"],
                     "start": alert_row["pattern_started_at"],
                     "end": alert_row["pattern_ended_at"]
@@ -78,13 +76,16 @@ try:
             )
             matching_logs = result.fetchall()
 
-        for log in matching_logs:
-            new_alert_log = AlertLog(
-                request_logs_id=log.id,
-                alerts_id=alert_row["id"]
-            )
-            db.add(new_alert_log)
+            insert_query = text("""
+                INSERT INTO alert_logs (request_logs_id, alerts_id, created_at)
+                VALUES (:request_log_id, :alert_id, now())
+            """)
+            for log in matching_logs:
+                connection.execute(insert_query, {
+                    "request_log_id": log.id,
+                    "alert_id": alert_row["id"]
+                })
 
-    db.commit()
-finally:
-    db.close()
+            connection.commit()
+except Exception as error:
+    print(f"Error al insertar alert_logs: {error}")
