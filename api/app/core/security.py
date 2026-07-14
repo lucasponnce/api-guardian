@@ -6,7 +6,7 @@ from app.models import User
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from jose import jwt
-import os
+import os, re
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -52,3 +52,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=401, detail="El usuario no existe")
     
     return user
+
+def redact_sensitive_fields(text):
+    if text is None:
+        return None
+    
+    text = re.sub(r'"password"\s*:\s*"[^"]*"', '"password": "***"', text)
+    text = re.sub(r'password=[^&]*', 'password=***', text)
+    return text

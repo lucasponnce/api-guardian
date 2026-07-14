@@ -111,7 +111,7 @@ python3 -m app.detection.train_model   # entrena y guarda el modelo en model.pkl
 python3 -m app.detection.detect        # aplica el modelo, genera alertas y las vincula a sus request_logs de origen
 ```
 
-## Estructura del repositorio
+## Estructura del proyecto
 
 ```
 api-guardian/

@@ -3,7 +3,7 @@ import time
 from sqlalchemy.orm import Session
 from app.db.database import get_db, SessionLocal
 from app.schemas.user import UserCreate, UserOut
-from app.core.security import hash_password, verify_password, create_access_token, decode_access_token, get_current_user
+from app.core.security import hash_password, verify_password, create_access_token, decode_access_token, get_current_user, redact_sensitive_fields
 from app.models import User, RequestLog
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -49,8 +49,21 @@ async def read_current_user(current_user: User = Depends(get_current_user)):
 @app.middleware("http")
 async def log_request(request: Request, call_next):
     start_time = time.perf_counter()
+
+    # Leemos el body antes de que el endpoint lo consuma
+    body = await request.body()
+
+    # Reinyectamos el body, para que el endpoint pueda usarlo después
+    async def receive():
+        return {"type": "http.request", "body": body}
+    request._receive = receive
+
     response = await call_next(request)
     process_time = (time.perf_counter() - start_time) * 1000 # 1 segundo = 1000 milisegundos
+
+    # Pasamos el body a texto, si tiene contenido
+    payload_text = body.decode("utf-8") if body else None
+    payload_text = redact_sensitive_fields(payload_text)
 
     # Guardamos el log en la base de datos
     db = SessionLocal()
@@ -60,13 +73,13 @@ async def log_request(request: Request, call_next):
             method = request.method,
             endpoint = request.url.path,
             query_params = str(request.url.query) if request.url.query else None,
+            request_payload= payload_text,
             status_code = response.status_code,
-            response_time_ms = process_time
+            response_time_ms = process_time,
         )
         db.add(log)
         db.commit()
         db.refresh(log)
-
     finally:
         db.close()
 
