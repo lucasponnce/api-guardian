@@ -4,6 +4,7 @@ from app.detection.extraction import extract_features
 from app.detection.classification import classify_alert_type
 from app.db.database import engine
 from sqlalchemy import text
+from app.detection.sql_injection_check import get_sqli_candidates, contains_sql_injection, build_sqli_alerts
 
 # Cargamos el modelo ya entrenado, en vez de entrenar de nuevo
 model = joblib.load("app/detection/model.pkl")
@@ -88,4 +89,63 @@ try:
 
             connection.commit()
 except Exception as error:
+
+    print(f"Error al insertar alert_logs: {error}")
+
+sqli_df = build_sqli_alerts()
+
+sqli_alerts_in_db = pd.read_sql("SELECT ip_address, alert_type, pattern_started_at, pattern_ended_at FROM alerts", engine)
+
+sqli_merged = sqli_df.merge(
+    sqli_alerts_in_db,
+    on=["ip_address", "alert_type", "pattern_started_at", "pattern_ended_at"],
+    how="left",
+    indicator="existence"
+)
+
+new_sqli_alerts = sqli_merged[sqli_merged["existence"] == "left_only"]
+
+new_sqli_alerts = new_sqli_alerts.drop(columns=["existence"])
+
+if not new_sqli_alerts.empty:
+    new_sqli_alerts.to_sql("alerts", engine, if_exists="append", index=False)
+
+all_sqli_alerts_in_db = pd.read_sql("SELECT id, ip_address, alert_type, pattern_started_at, pattern_ended_at FROM alerts", engine)
+
+sqli_alerts_with_id = new_sqli_alerts.merge(
+    all_sqli_alerts_in_db,
+    on=["ip_address", "alert_type", "pattern_started_at", "pattern_ended_at"],
+    how="inner"
+)
+
+try:
+    for i, alert_row in sqli_alerts_with_id.iterrows():
+        select_query = text("""
+            SELECT id FROM request_logs
+            WHERE ip_address = :ip
+            AND created_at BETWEEN :start AND :end
+        """)
+        with engine.connect() as connection:
+            result = connection.execute(
+                select_query, {
+                    "ip": alert_row["ip_address"],
+                    "start": alert_row["pattern_started_at"],
+                    "end": alert_row["pattern_ended_at"]
+                }
+            )
+            matching_logs = result.fetchall()
+
+            insert_query = text("""
+                INSERT INTO alert_logs (request_logs_id, alerts_id, created_at)
+                VALUES (:request_log_id, :alert_id, now())
+            """)
+            for log in matching_logs:
+                connection.execute(insert_query, {
+                    "request_log_id": log.id,
+                    "alert_id": alert_row["id"]
+                })
+
+            connection.commit()
+except Exception as error:
+        
     print(f"Error al insertar alert_logs: {error}")

