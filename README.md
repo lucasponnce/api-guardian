@@ -4,7 +4,7 @@ Proyecto personal desarrollado durante la carrera de Ingeniería en Sistemas de 
 
 ## Objetivo
 
-Diseñar un sistema de monitoreo de seguridad para APIs REST, capaz de detectar comportamiento anómalo (fuerza bruta, IDOR, scraping/enumeración, abuso de rate limit, intentos de SQL injection, fuzzing de endpoints) combinando reglas y Machine Learning no supervisado.
+Diseñar un sistema de monitoreo de seguridad para APIs REST, capaz de detectar comportamiento anómalo (fuerza bruta, scraping/enumeración, fuzzing de endpoints e intentos de SQL injection) combinando reglas y Machine Learning no supervisado.
 
 En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por segundo"), el sistema aprende cuál es el comportamiento normal de tráfico hacia una API y marca como sospechoso lo que se desvía de ese patrón.
 
@@ -13,9 +13,10 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 1. API REST objetivo con autenticación, roles y recursos, usada como banco de pruebas
 2. Middleware de logging que registra cada request (IP, endpoint, método, payload, status code, tiempos)
 3. Simulador de tráfico normal y de tráfico de ataque para entrenamiento y pruebas
-4. Motor de detección de anomalías basado en Isolation Forest (scikit-learn)
-5. Generación de alertas asociadas a los requests que las originaron, con estado de revisión
-6. Dashboard web para visualización de alertas
+4. Motor de detección de anomalías basado en Isolation Forest (scikit-learn) para fuerza bruta, scraping y fuzzing
+5. Detección de SQL injection basada en reglas (decodificación de payloads y búsqueda de patrones sospechosos)
+6. Generación de alertas asociadas a los requests que las originaron, con estado de revisión
+7. Dashboard web para visualización de alertas
 
 ## Tecnologías
 
@@ -31,9 +32,9 @@ En vez de depender solo de reglas fijas ("bloquear si hay más de X requests por
 
 El proyecto está pensado en componentes separados:
 
-1. **`api/`** — API REST "objetivo" (registro, login con JWT, endpoint protegido `/me`, consulta de usuarios por ID) que sirve como banco de pruebas. Incluye el middleware que loguea cada request en `request_logs`.
-2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs`, entrenamiento del modelo de detección de anomalías (Isolation Forest) y generación de alertas, incluyendo su vinculación con los `request_logs` que las originaron. No intercepta tráfico en vivo; lee los logs generados por `api/`.
-3. **`traffic_simulator/`** — scripts que generan tráfico normal (`normal_traffic.py`) y tráfico de ataque simulado (`attack_simulator.py`: fuerza bruta, scraping/IDOR, endpoint fuzzing) contra la API objetivo.
+1. **`api/`** — API REST "objetivo" (registro, login con JWT, endpoint protegido `/me`, consulta de usuarios por ID) que sirve como banco de pruebas. Incluye el middleware que loguea cada request en `request_logs`, con redacción de contraseñas antes de persistir el payload.
+2. **`security_gateway/`** — servicio de análisis: extracción de features a partir de `request_logs`, entrenamiento del modelo de detección de anomalías (Isolation Forest), detección de SQL injection basada en reglas, y generación de alertas con su vinculación a los `request_logs` que las originaron. No intercepta tráfico en vivo; lee los logs generados por `api/`.
+3. **`traffic_simulator/`** — scripts que generan tráfico normal (`normal_traffic.py`) y tráfico de ataque simulado (`attack_simulator.py`: fuerza bruta, scraping, endpoint fuzzing, SQL injection) contra la API objetivo.
 4. **`dashboard/`** — panel donde se visualizan las alertas generadas. *(pendiente)*
 
 ## Modelo de datos
@@ -46,7 +47,7 @@ El diseño contempla 6 tablas:
 - `alerts` — alertas generadas a partir de patrones sospechosos detectados (tipo, score de anomalía, ventana temporal del patrón, estado de revisión).
 - `alert_logs` — tabla intermedia que vincula cada alerta con los `request_logs` puntuales que la originaron.
 
-Tipos de alerta contemplados: `bruteforce`, `idor`, `scraping`, `rate_limit`, `sql_injection`, `endpoint_fuzzing`.
+Tipos de alerta contemplados: `bruteforce`, `scraping`, `endpoint_fuzzing`, `sql_injection`.
 
 El schema completo (DDL) vive en [`database/init.sql`](./database/init.sql) y se aplica automáticamente al levantar el contenedor de PostgreSQL.
 
@@ -97,7 +98,7 @@ pip install -r requirements.txt
 python3 normal_traffic.py --num-users 50 --duration 300 --rpm 60
 ```
 
-Los ataques (`attack_simulator.py`) se prueban actualmente desde la consola interactiva de Python, importando las funciones `brute_force_attack`, `scraping_attack` y `endpoint_fuzzing_attack`.
+Los ataques (`attack_simulator.py`) se prueban actualmente desde la consola interactiva de Python, importando las funciones `brute_force_attack`, `scraping_attack`, `endpoint_fuzzing_attack` y `sql_injection_attack`.
 
 ### 5. Entrenar el modelo y detectar anomalías
 
@@ -108,7 +109,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 python3 -m app.detection.train_model   # entrena y guarda el modelo en model.pkl
-python3 -m app.detection.detect        # aplica el modelo, genera alertas y las vincula a sus request_logs de origen
+python3 -m app.detection.detect        # aplica el modelo, genera alertas (ML + SQLi) y las vincula a sus request_logs de origen
 ```
 
 ## Estructura del proyecto
@@ -149,6 +150,7 @@ api-guardian/
         └── detection/
             ├── extraction.py
             ├── classification.py
+            ├── sql_injection_check.py
             ├── train_model.py
             ├── detect.py
             └── model.pkl
